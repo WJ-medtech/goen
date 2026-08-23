@@ -271,7 +271,7 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const LS = {
   url:'goen.url', key:'goen.key', cache:'goen.cache', queue:'goen.queue',
-  email:'goen.email', local:'goen.localonly', tomb:'goen.tomb'
+  email:'goen.email', local:'goen.localonly', tomb:'goen.tomb', dead:'goen.dead'
 };
 const cfg = {
   url: localStorage.getItem(LS.url) || SUPABASE_URL,
@@ -517,12 +517,28 @@ function fixFK(err, op){
   setQueue([...front, ...q]);
   return true;
 }
+/* 送れなかった変更の置き場（中身は捨てずにここに残す） */
+function deadKey(){ return LS.dead + '.' + (user? user.id : 'anon'); }
+function getDead(){ try{ return JSON.parse(localStorage.getItem(deadKey())||'[]'); }catch(e){ return []; } }
+function setDead(d){ try{ localStorage.setItem(deadKey(), JSON.stringify(d)); }catch(e){} }
+const deadCount = () => getDead().length;
+/* データそのものの問題（＝何度送っても直らない）かどうか */
+function isPermanent(e){
+  const m = ((e && e.message) || '') + ' ' + ((e && e.code) || '');
+  return /2\d{4}|4\d{4}|PGRST|violates|invalid input|duplicate key/i.test(m);
+}
+function moveToDead(op, e){
+  const d = getDead();
+  d.push({ ...op, err: (e && e.message) ? e.message : String(e) });
+  setDead(d.slice(-2000)); dequeue(op);
+}
+
 let flushing = false;
 async function flush(){
   if (!sb || flushing || !navigator.onLine) return;
   flushing = true;
   const fkTried = new Set();
-  let guard = 0;
+  let guard = 0, moved = 0;
   try{
     while (true){
       const q = getQueue();
@@ -535,8 +551,11 @@ async function flush(){
           : await sb.from(op.table).delete().eq('id', op.row.id);
         if (res.error) throw res.error;
       }catch(e){
+        // 親を先に送れば直るなら、そうする
         if (!fkTried.has(op.opId) && fixFK(e, op)){ fkTried.add(op.opId); continue; }
-        throw e;
+        // 直らない種類のエラーなら、脇によけて先に進む（1件で全部止めない）
+        if (isPermanent(e)){ moveToDead(op, e); moved++; continue; }
+        throw e;   // 通信・認証まわりは、あとで自動再試行
       }
       dequeue(op);
     }
@@ -546,6 +565,89 @@ async function flush(){
     setSync(false);
   }
   finally{ flushing = false; }
+}
+
+/* 送れなかった変更を救出する：足りない親（小項目・病院）を作り直してから送り直す */
+function rescueDead(){
+  const dead = getDead();
+  if (!dead.length){ toast('救出するものはありません'); return; }
+
+  const missFields = [], missHosps = [];
+  for (const d of dead){
+    if (d.table !== 'entries' || !d.row) continue;
+    const fid = d.row.field_id, hid = d.row.hospital_id;
+    if (fid && !S.fields.some(f => f.id === fid) && !missFields.includes(fid)) missFields.push(fid);
+    if (hid && !S.hosps.some(h => h.id === hid) && !missHosps.includes(hid)) missHosps.push(hid);
+  }
+  // 足りない小項目を、既定の18項目の「まだ無い名前」を順に当てて作り直す
+  const used = new Set(S.fields.map(f => f.label));
+  const avail = DEFAULT_FIELDS.filter(l => !used.has(l));
+  let max = S.fields.length ? Math.max(...S.fields.map(f => f.sort_order ?? 0)) : -1;
+  missFields.forEach((fid, i) => {
+    put('fields', { id:fid, user_id:uidNow(),
+      label: avail[i] || `復元項目 ${i + 1}`, sort_order: ++max });
+  });
+  // 足りない病院も作り直す
+  const cat0 = [...S.cats].sort((a,b)=>(a.sort_order??0)-(b.sort_order??0))[0];
+  missHosps.forEach((hid, i) => {
+    if (!cat0) return;
+    put('hospitals', { id:hid, user_id:uidNow(), category_id:cat0.id,
+      name:`復元した病院 ${i + 1}`, sort_order: 900 + i });
+  });
+  // よけておいた変更を、もう一度キューに戻す
+  setDead([]);
+  for (const d of dead){
+    if (d.type === 'upsert') put(d.table, d.row); else del(d.table, d.row.id);
+  }
+  render();
+  toast(`小項目${missFields.length}個を作り直して、${dead.length}件を送り直します`);
+  retrySync();
+}
+/* 送れなかった変更の中身を読む／書き出す */
+function exportDead(){
+  const dead = getDead();
+  const fmap = Object.fromEntries(S.fields.map(f=>[f.id,f.label]));
+  const hmap = Object.fromEntries(S.hosps.map(h=>[h.id,h.name]));
+  const lines = dead.filter(d=>d.table==='entries' && d.row && (d.row.value||'').trim())
+    .map(d => `【${hmap[d.row.hospital_id] || '病院不明'}】${fmap[d.row.field_id] || '項目不明'}\n${d.row.value}\n`);
+  const txt = lines.length ? lines.join('\n') : '（テキストの入力データはありませんでした）';
+  const blob = new Blob([txt], {type:'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `goen-未送信メモ-${new Date().toISOString().slice(0,10)}.txt`;
+  a.click(); URL.revokeObjectURL(a.href);
+}
+function viewDead(){
+  const dead = getDead();
+  const fmap = Object.fromEntries(S.fields.map(f=>[f.id,f.label]));
+  const texts = dead.filter(d=>d.table==='entries' && d.row && (d.row.value||'').trim());
+  sheet(`送れなかった変更 ${dead.length}件`, `
+    <div class="meta" style="white-space:normal;line-height:1.9">
+      うち、文章が入っているもの ${texts.length}件。中身はこの端末に残しています。</div>
+    <div style="max-height:38dvh;overflow:auto;margin-top:12px">
+      ${texts.length ? texts.map(d=>`<div class="card plain" style="margin-bottom:8px">
+        <div class="meta" style="color:var(--gold)">${esc(fmap[d.row.field_id] || '項目不明')}</div>
+        <div class="meta" style="white-space:pre-wrap;color:var(--tx);margin-top:3px">${esc(d.row.value)}</div>
+      </div>`).join('') : '<div class="meta">文章データはありません</div>'}
+    </div>
+    <button class="btn wide sm" style="margin-top:12px" onclick="rescueDead();closeSheet();">救出して送り直す</button>
+    <button class="btn wide ghost sm" style="margin-top:9px" onclick="exportDead()">テキストで書き出す</button>
+    <button class="btn wide danger sm" style="margin-top:9px" onclick="discardDead()">これらを破棄してエラーを消す</button>`,
+    ()=>{}, '閉じる');
+}
+function discardDead(){
+  const n = deadCount();
+  if (!confirm(`送れなかった変更 ${n}件を破棄します。書き出していない文章は失われます。よろしいですか？`)) return;
+  setDead([]); closeSheet(); render(); toast('破棄しました');
+}
+/* 最終手段：未送信をすべて捨てて、サーバーの状態に合わせ直す */
+async function resetSync(){
+  const n = pendingCount() + deadCount();
+  if (!confirm(`未送信の変更 ${n}件をすべて破棄して、サーバーの内容に合わせ直します。\nこの端末にしかない入力は失われます。よろしいですか？`)) return;
+  if (n && confirm('念のため、破棄する前にバックアップを書き出しますか？')) { exportJSON(); exportDead(); }
+  setQueue([]); setDead([]); lastError = ''; syncOK = true;
+  S = { cats:[], hosps:[], fields:[], entries:[] }; saveCache();
+  closeSheet(); await pull(); render(); toast('やり直しました');
 }
 const pendingCount = () => getQueue().length;
 /* 未送信のキューの中身を、いまの表示データに反映する（＝入力が消えないようにする） */
@@ -715,17 +817,31 @@ function setFab(label, fn){ const f=$('#fab'); f.textContent=label; f.onclick=fn
 
 /* ================== 画面：大項目一覧 ================== */
 function errBanner(){
-  if (!lastError) return '';
-  const n = pendingCount();
-  return `<div class="card" style="border-color:rgba(226,112,122,.4)">
-    <div class="title" style="font-size:14px;color:var(--danger);white-space:normal">サーバーに送れていません</div>
-    <div class="meta" style="white-space:normal;color:var(--tx2);margin-top:4px">
-      入力した内容はこの端末に残っています（未送信 ${n}件）。消えないのでご安心ください。</div>
-    <div class="meta" style="white-space:normal;margin-top:6px">${esc(lastError)}</div>
-    <div class="row" style="gap:8px;margin-top:11px">
-      <button class="btn sm" onclick="retrySync()">もう一度送る</button>
-      <button class="btn ghost sm" onclick="connTestApp()">詳しく見る</button>
-    </div></div>`;
+  const n = pendingCount(), d = deadCount();
+  let html = '';
+  if (lastError){
+    html += `<div class="card" style="border-color:rgba(226,112,122,.4)">
+      <div class="title" style="font-size:14px;color:var(--danger);white-space:normal">サーバーに送れていません</div>
+      <div class="meta" style="white-space:normal;color:var(--tx2);margin-top:4px">
+        入力した内容はこの端末に残っています（未送信 ${n}件）。消えないのでご安心ください。</div>
+      <div class="meta" style="white-space:normal;margin-top:6px">${esc(lastError)}</div>
+      <div class="row" style="gap:8px;margin-top:11px">
+        <button class="btn sm" onclick="retrySync()">もう一度送る</button>
+        <button class="btn ghost sm" onclick="connTestApp()">詳しく見る</button>
+      </div></div>`;
+  }
+  if (d){
+    html += `<div class="card" style="border-color:rgba(217,174,95,.45)">
+      <div class="title" style="font-size:14px;color:var(--gold);white-space:normal">送れなかった変更が ${d}件あります</div>
+      <div class="meta" style="white-space:normal;color:var(--tx2);margin-top:4px">
+        小項目が失われたため、入力だけが行き場をなくしています。
+        中身はこの端末に残してあるので、作り直して送り直せます。</div>
+      <div class="row" style="gap:8px;margin-top:11px">
+        <button class="btn sm" onclick="rescueDead()">救出する</button>
+        <button class="btn ghost sm" onclick="viewDead()">中身を見る</button>
+      </div></div>`;
+  }
+  return html;
 }
 async function retrySync(){
   toast('送信しています…');
@@ -911,7 +1027,9 @@ function viewSettings(){
     <button class="btn wide ghost" onclick="connTestApp()">接続テスト（テーブルの状態を見る）</button>
     <button class="btn wide ghost" style="margin-top:9px" onclick="exportJSON()">バックアップを書き出す（JSON）</button>
     <button class="btn wide ghost" style="margin-top:9px" onclick="importJSON()">バックアップから復元</button>
+    ${deadCount() ? `<button class="btn wide" style="margin-top:9px" onclick="viewDead()">送れなかった変更 ${deadCount()}件を見る</button>` : ''}
     <button class="btn wide ghost" style="margin-top:9px" onclick="openSupaConfig()">接続設定</button>
+    <button class="btn wide danger" style="margin-top:9px" onclick="resetSync()">同期の問題をリセット（未送信を破棄）</button>
     <button class="btn wide danger" style="margin-top:20px" onclick="doLogout()">ログアウト</button>
     <div class="meta" style="margin-top:12px;text-align:center;line-height:2">
       ログアウトすると次回またコードでのログインが必要です</div>`;
