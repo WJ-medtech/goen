@@ -368,15 +368,34 @@ async function pwLogin(){
   if (s.data.session){ localStorage.setItem(LS.email, email); user = s.data.user; return startApp(); }
   setStatus('確認メールを送りました。メール内のリンクを開いてから、もう一度「はじめる」を押してください。');
 }
+async function checkConn(){
+  if (!sb) return { ok:false, msg:'接続設定が未完了です。' };
+  const out = {};
+  for (const t of ['categories','hospitals','fields','entries']){
+    const { error } = await sb.from(t).select('id').limit(1);
+    if (!error) { out[t] = 'ok'; continue; }
+    const m = (error.message || '') + ' ' + (error.code || '');
+    if (/does not exist|42P01|PGRST205|schema cache/i.test(m)) out[t] = 'なし';
+    else out[t] = jaErr(error.message);
+  }
+  const bad = Object.entries(out).filter(([,v]) => v !== 'ok');
+  if (!bad.length) return { ok:true, msg:`✓ 接続OK。テーブル4つとも正常です。（小項目 ${S.fields.length}件／大学・科 ${S.cats.length}件）` };
+  if (bad.every(([,v]) => v === 'なし'))
+    return { ok:false, msg:'つながりましたが、テーブルがありません。SQL Editor で supabase-setup.sql を実行してください。' };
+  return { ok:false, msg:'テーブルの状態：' + bad.map(([k,v]) => `${k}=${v}`).join(' / ') };
+}
 async function connTest(){
-  if (!sb) return setStatus('接続設定が未完了です。', true);
   setStatus('接続を確認しています…');
-  const { error } = await sb.from('categories').select('id').limit(1);
-  if (!error) return setStatus('✓ 接続OK。テーブルもできています。');
-  const m = (error.message || '') + ' ' + (error.code || '');
-  if (/does not exist|42P01|PGRST205|schema cache/i.test(m))
-    return setStatus('つながりましたが、テーブルがありません。SQL Editor で supabase-setup.sql を実行してください。', true);
-  setStatus('エラー：' + jaErr(error.message), true);
+  const r = await checkConn();
+  setStatus(r.msg, !r.ok);
+}
+async function connTestApp(){
+  toast('確認中…');
+  const r = await checkConn();
+  sheet('接続の状態', `<div class="meta" style="white-space:normal;color:${r.ok?'var(--tx2)':'var(--danger)'};line-height:1.9">${esc(r.msg)}</div>
+    ${lastError ? `<div class="meta" style="white-space:normal;margin-top:10px;color:var(--danger)">直近のエラー：${esc(lastError)}</div>` : ''}
+    <button class="btn wide ghost sm" style="margin-top:14px" onclick="pull();closeSheet();">サーバーから読み直す</button>`,
+    ()=>{}, '閉じる');
 }
 function setStatus(m, err){ const e=$('#auth-status'); e.textContent=m; e.className='status'+(err?' err':''); }
 function authStep(n){
@@ -478,12 +497,15 @@ async function flush(){
       q.shift(); setQueue(q);
     }
     setSync(true);
-  }catch(e){ setSync(false); }
+  }catch(e){
+    lastError = (e && e.message) ? e.message : String(e);
+    setSync(false);
+  }
   finally{ flushing = false; }
 }
 window.addEventListener('online', flush);
 
-let syncOK = true;
+let syncOK = true, lastError = '';
 function setSync(ok){
   if (ok===syncOK) return; syncOK=ok;
   const b = document.getElementById('syncbadge'); if (b) b.className = 'badge'+(ok?' on':'');
@@ -501,14 +523,35 @@ async function pull(){
     ]);
     if (c.error||h.error||f.error||e.error) throw (c.error||h.error||f.error||e.error);
     S = { cats:c.data, hosps:h.data, fields:f.data, entries:e.data };
-    if (!S.cats.length && !S.fields.length){
-      const seed = seedData();
-      for (const r of seed.cats)   { S.cats.push(r);   enqueue({table:'categories', type:'upsert', row:r}); }
-      for (const r of seed.fields) { S.fields.push(r); enqueue({table:'fields',     type:'upsert', row:r}); }
-      toast('初期データを作成しました');
+    // 大項目と小項目は「それぞれ独立に」不足していれば補う
+    const seed = seedData();
+    let seeded = false;
+    if (!S.cats.length){
+      for (const r of seed.cats){ S.cats.push(r); enqueue({table:'categories', type:'upsert', row:r}); }
+      seeded = true;
     }
-    saveCache(); render();
-  }catch(err){ setSync(false); }
+    if (!S.fields.length){
+      for (const r of seed.fields){ S.fields.push(r); enqueue({table:'fields', type:'upsert', row:r}); }
+      seeded = true;
+    }
+    if (seeded) toast('初期データを作成しました');
+    lastError = ''; saveCache(); render();
+  }catch(err){
+    lastError = (err && err.message) ? err.message : String(err);
+    setSync(false); render();
+  }
+}
+/* 既定の18項目のうち、無いものだけを足す */
+function ensureFields(){
+  const have = new Set(S.fields.map(f=>f.label));
+  let max = S.fields.length ? Math.max(...S.fields.map(f=>f.sort_order??0)) : -1;
+  let n = 0;
+  for (const label of DEFAULT_FIELDS){
+    if (have.has(label)) continue;
+    put('fields', { id:uid(), user_id:uidNow(), label, sort_order:++max }); n++;
+  }
+  render();
+  toast(n ? `小項目を${n}個つくりました` : '不足している小項目はありません');
 }
 
 /* ---- 変更 API（ローカル即時 + キュー送信） ---- */
@@ -569,9 +612,19 @@ function head(title, sub){
 function setFab(label, fn){ const f=$('#fab'); f.textContent=label; f.onclick=fn; f.classList.remove('hide'); }
 
 /* ================== 画面：大項目一覧 ================== */
+function errBanner(){
+  if (!lastError) return '';
+  return `<div class="card" style="border-color:rgba(226,112,122,.4)">
+    <div class="title" style="font-size:14px;color:var(--danger);white-space:normal">同期できていません</div>
+    <div class="meta" style="white-space:normal;color:var(--tx2);margin-top:4px">${esc(lastError)}</div>
+    <div class="row" style="gap:8px;margin-top:11px">
+      <button class="btn sm" onclick="pull()">再試行</button>
+      <button class="btn ghost sm" onclick="ensureFields()">小項目を作り直す</button>
+    </div></div>`;
+}
 function viewHome(){
   const q = (window._q||'').trim();
-  let body = `<div class="searchwrap"><span>検索</span>
+  let body = errBanner() + `<div class="searchwrap"><span>検索</span>
     <input class="input" id="q" placeholder="病院名・メモを横断検索" value="${esc(q)}"
       oninput="window._q=this.value;renderSearch()"></div>
     <div id="qres"></div><div id="qlist">`;
@@ -633,7 +686,8 @@ function viewCat(v){
       <button class="btn ghost sm" onclick="editCat('${c.id}')">名前を編集</button>
     </div>`;
   if (!hs.length){
-    body += `<div class="empty"><b>病院がまだありません</b>右下の「＋ 病院」から追加してください。</div>`;
+    body += `<div class="empty"><b>病院がまだありません</b>右下の「＋ 病院」から追加してください。<br>
+      小項目（直感・当直など）は、病院を追加するとその中に出てきます。</div>`;
   } else {
     body += hs.map((h,i)=>`<div class="card"><div class="row">
       <button class="row-main" onclick="nav({v:'hosp',id:'${h.id}'})">
@@ -653,10 +707,18 @@ function viewHosp(v){
   const c = catOf(h.category_id);
   head(h.name, c?c.name:'');
   const fs = sortedFields();
-  let body = `<div class="row" style="gap:8px;margin-bottom:16px">
+  let body = errBanner() + `<div class="row" style="gap:8px;margin-bottom:16px">
       <button class="btn ghost sm" style="flex:1" onclick="renameHosp('${h.id}')">病院名を編集</button>
       <button class="btn ghost sm" onclick="askDelHosp('${h.id}')">削除</button>
     </div><div class="sec-label">小項目<span id="syncbadge" class="badge${syncOK?' on':''}">同期</span></div>`;
+  if (!fs.length){
+    body += `<div class="empty"><b>小項目がありません</b>
+      下のボタンで、はじめの18項目をまとめて作れます。</div>
+      <button class="btn solid wide" onclick="ensureFields()">はじめの18項目をつくる</button>
+      <button class="btn wide ghost" style="margin-top:9px" onclick="addField()">＋ 自分で追加する</button>`;
+    $('#view').innerHTML = body;
+    return;
+  }
   body += fs.map(f=>{
     const e = entryOf(h.id, f.id);
     return `<div class="fld">
@@ -707,7 +769,7 @@ function viewCompare(v){
 function viewSettings(){
   head('設定');
   const fs = sortedFields();
-  let body = `<div class="sec-label">アカウント</div>
+  let body = errBanner() + `<div class="sec-label">アカウント</div>
     <div class="card plain"><div class="meta">${esc(user && user.email ? user.email : (localOnly()?'この端末のみで使用中':'—'))}</div>
     <div class="meta" style="margin-top:4px">大学・科 ${S.cats.length}／病院 ${S.hosps.length}／小項目 ${S.fields.length}</div></div>`;
 
@@ -718,7 +780,8 @@ function viewSettings(){
       <button class="mini" onclick="moveField('${f.id}',1)" ${i===fs.length-1?'disabled style="opacity:.3"':''}>↓</button>
       <button class="mini" onclick="editField('${f.id}')">編集</button>
     </div></div>`).join('');
-  body += `<button class="btn wide ghost" style="margin-top:8px" onclick="addField()">＋ 小項目を追加</button>`;
+  body += `<button class="btn wide ghost" style="margin-top:8px" onclick="addField()">＋ 小項目を追加</button>
+    <button class="btn wide ghost" style="margin-top:9px" onclick="ensureFields()">はじめの18項目を補充する</button>`;
 
   body += `<div class="sec-label">大学・科の並び</div>`;
   const cats=[...S.cats].sort((a,b)=>(a.sort_order??0)-(b.sort_order??0));
@@ -730,7 +793,8 @@ function viewSettings(){
     </div></div>`).join('');
 
   body += `<div class="sec-label">データ</div>
-    <button class="btn wide ghost" onclick="exportJSON()">バックアップを書き出す（JSON）</button>
+    <button class="btn wide ghost" onclick="connTestApp()">接続テスト（テーブルの状態を見る）</button>
+    <button class="btn wide ghost" style="margin-top:9px" onclick="exportJSON()">バックアップを書き出す（JSON）</button>
     <button class="btn wide ghost" style="margin-top:9px" onclick="importJSON()">バックアップから復元</button>
     <button class="btn wide ghost" style="margin-top:9px" onclick="openSupaConfig()">接続設定</button>
     <button class="btn wide danger" style="margin-top:20px" onclick="doLogout()">ログアウト</button>
