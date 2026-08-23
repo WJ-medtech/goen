@@ -1,0 +1,886 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>GOEN</title>
+<meta name="theme-color" content="#080F27">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="GOEN">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="assets/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icon-180.png">
+<style>
+:root{
+  --bg:#080F27; --bg2:#0A1330; --panel:#111B3A; --panel2:#16224a;
+  --line:rgba(217,174,95,.22); --line2:rgba(255,255,255,.08);
+  --gold:#D9AE5F; --gold-l:#F6E3B0; --gold-d:#9C6F2A;
+  --tx:#EAEFFA; --tx2:#9FB0D0; --tx3:#6C7EA3;
+  --danger:#E2707A;
+  --r:14px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  background:
+    radial-gradient(120% 70% at 50% -10%, #101B41 0%, var(--bg) 55%, #050A1A 100%) fixed;
+  color:var(--tx); font-size:16px; line-height:1.65;
+  font-family:"Hiragino Mincho ProN","Yu Mincho",YuMincho,"Noto Serif JP",serif;
+  min-height:100dvh; overscroll-behavior-y:none;
+}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer;border:none;background:none}
+textarea{resize:vertical}
+a{color:var(--gold)}
+.hide{display:none!important}
+
+/* ---------- header ---------- */
+header{
+  position:sticky; top:0; z-index:50;
+  padding:calc(env(safe-area-inset-top) + 10px) 14px 10px;
+  background:rgba(8,15,39,.86); backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--line2);
+  display:flex; align-items:center; gap:10px;
+}
+.hd-title{font-size:17px; font-weight:600; letter-spacing:.06em; flex:1; min-width:0;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.hd-sub{font-size:11px; color:var(--tx3); letter-spacing:.12em; display:block; font-weight:400}
+.iconbtn{
+  width:38px;height:38px;border-radius:11px;display:grid;place-items:center;
+  border:1px solid var(--line2); color:var(--tx2); flex:none; font-size:15px;
+}
+.iconbtn:active{background:var(--panel)}
+.brand{display:flex;align-items:center;gap:9px;flex:1;min-width:0}
+.brand img{width:30px;height:30px;border-radius:9px;flex:none}
+.wordmark{font-size:20px;letter-spacing:.26em;
+  background:linear-gradient(120deg,var(--gold-l),var(--gold) 45%,var(--gold-d));
+  -webkit-background-clip:text;background-clip:text;color:transparent;font-weight:600}
+
+main{padding:16px 14px calc(env(safe-area-inset-bottom) + 110px); max-width:760px; margin:0 auto}
+
+/* ---------- cards / lists ---------- */
+.card{
+  background:linear-gradient(160deg,var(--panel) 0%,#0E1734 100%);
+  border:1px solid var(--line2); border-radius:var(--r);
+  padding:14px 15px; margin-bottom:10px; position:relative; overflow:hidden;
+}
+.card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;
+  background:linear-gradient(180deg,var(--gold-l),var(--gold-d));opacity:.75}
+.card.plain::before{display:none}
+.row{display:flex;align-items:center;gap:10px}
+.row-main{flex:1;min-width:0;text-align:left}
+.title{font-size:16.5px;font-weight:600;letter-spacing:.03em;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.meta{font-size:12px;color:var(--tx3);letter-spacing:.06em;margin-top:2px}
+.chev{color:var(--gold);opacity:.6;font-size:18px;flex:none}
+
+.sec-label{font-size:11.5px;letter-spacing:.18em;color:var(--tx3);margin:22px 2px 9px;
+  display:flex;align-items:center;gap:9px}
+.sec-label::after{content:"";flex:1;height:1px;background:var(--line2)}
+
+.empty{text-align:center;color:var(--tx3);padding:38px 16px;font-size:14px;line-height:2}
+.empty b{display:block;color:var(--tx2);font-size:15px;margin-bottom:6px;letter-spacing:.08em}
+
+/* ---------- buttons ---------- */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  padding:12px 18px;border-radius:12px;font-size:15px;letter-spacing:.06em;
+  border:1px solid var(--line); color:var(--gold-l);
+  background:linear-gradient(160deg,rgba(217,174,95,.14),rgba(217,174,95,.04));
+}
+.btn:active{transform:translateY(1px)}
+.btn.solid{background:linear-gradient(120deg,var(--gold-l),var(--gold) 55%,var(--gold-d));
+  color:#1a1206;border-color:transparent;font-weight:700}
+.btn.ghost{background:none;border-color:var(--line2);color:var(--tx2)}
+.btn.danger{color:var(--danger);border-color:rgba(226,112,122,.3);background:rgba(226,112,122,.07)}
+.btn.wide{width:100%}
+.btn.sm{padding:8px 13px;font-size:13.5px;border-radius:10px}
+
+.fab{
+  position:fixed; right:16px; bottom:calc(env(safe-area-inset-bottom) + 22px); z-index:40;
+  padding:14px 22px; border-radius:30px; font-size:15px; font-weight:700; letter-spacing:.08em;
+  background:linear-gradient(120deg,var(--gold-l),var(--gold) 55%,var(--gold-d)); color:#1a1206;
+  box-shadow:0 10px 30px rgba(0,0,0,.45), 0 0 0 1px rgba(255,255,255,.12) inset;
+}
+
+/* ---------- inputs ---------- */
+.input, textarea.input{
+  width:100%; background:rgba(255,255,255,.045); border:1px solid var(--line2);
+  border-radius:11px; padding:11px 13px; font-size:16px; line-height:1.7;
+  outline:none; transition:border-color .15s, background .15s;
+  font-family:inherit;
+}
+.input:focus{border-color:var(--gold);background:rgba(217,174,95,.07)}
+.input::placeholder{color:var(--tx3)}
+label.lbl{display:block;font-size:12px;letter-spacing:.14em;color:var(--tx3);margin:0 0 6px 2px}
+
+/* ---------- field editor ---------- */
+.fld{margin-bottom:14px}
+.fld-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.fld-name{flex:1;font-size:13px;letter-spacing:.1em;color:var(--gold);font-weight:600}
+.fld-name .dot{color:var(--gold-d);margin-right:7px}
+.mini{font-size:11px;color:var(--tx3);border:1px solid var(--line2);border-radius:8px;
+  padding:3px 8px;letter-spacing:.06em}
+.mini:active{background:var(--panel)}
+textarea.fld-in{min-height:52px;field-sizing:content}
+
+/* ---------- search ---------- */
+.searchwrap{position:relative;margin-bottom:6px}
+.searchwrap .input{padding-left:54px}
+.searchwrap span{position:absolute;left:14px;top:50%;transform:translateY(-50%);
+  color:var(--tx3);font-size:11.5px;letter-spacing:.08em;pointer-events:none;
+  padding-right:10px;border-right:1px solid var(--line2)}
+
+/* ---------- compare table ---------- */
+.tblwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line2);
+  border-radius:12px;background:var(--panel)}
+table{border-collapse:separate;border-spacing:0;font-size:13px;line-height:1.6}
+th,td{padding:9px 11px;border-bottom:1px solid var(--line2);border-right:1px solid var(--line2);
+  vertical-align:top;min-width:180px;max-width:260px;white-space:pre-wrap;word-break:break-word}
+thead th{position:sticky;top:0;background:#152045;color:var(--gold);font-weight:600;
+  font-size:12px;letter-spacing:.08em;white-space:nowrap;z-index:2}
+tbody th{position:sticky;left:0;background:#152045;text-align:left;font-weight:600;
+  min-width:130px;max-width:150px;z-index:1;color:var(--tx)}
+thead th:first-child{left:0;z-index:3}
+td{color:var(--tx2)}
+td:empty::after{content:"—";color:var(--tx3)}
+
+/* ---------- sheet / modal ---------- */
+.mask{position:fixed;inset:0;background:rgba(3,6,16,.72);backdrop-filter:blur(4px);z-index:100;
+  display:flex;align-items:flex-end;justify-content:center}
+.sheet{
+  width:100%;max-width:560px;background:linear-gradient(180deg,#152045,#0C1430);
+  border:1px solid var(--line);border-bottom:none;border-radius:20px 20px 0 0;
+  padding:20px 18px calc(env(safe-area-inset-bottom) + 20px);
+  animation:up .22s ease-out; max-height:88dvh; overflow-y:auto;
+}
+@keyframes up{from{transform:translateY(22px);opacity:.4}to{transform:none;opacity:1}}
+.sheet h3{margin:0 0 14px;font-size:16px;letter-spacing:.1em;font-weight:600}
+.sheet .btns{display:flex;gap:9px;margin-top:16px}
+.sheet .btns .btn{flex:1}
+
+/* ---------- toast ---------- */
+#toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 90px);
+  transform:translateX(-50%);z-index:200;background:#1b2650;border:1px solid var(--line);
+  color:var(--gold-l);padding:9px 17px;border-radius:20px;font-size:13px;letter-spacing:.06em;
+  opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap;max-width:92vw;
+  overflow:hidden;text-overflow:ellipsis}
+#toast.on{opacity:1}
+
+/* ---------- auth ---------- */
+#auth{min-height:100dvh;display:grid;place-items:center;padding:24px;text-align:center}
+#auth .box{width:100%;max-width:360px}
+#auth img{width:110px;height:110px;border-radius:26px;margin-bottom:18px;
+  box-shadow:0 14px 40px rgba(0,0,0,.5)}
+#auth .wm{font-size:34px;letter-spacing:.32em;margin-left:.32em;
+  background:linear-gradient(120deg,var(--gold-l),var(--gold) 45%,var(--gold-d));
+  -webkit-background-clip:text;background-clip:text;color:transparent;font-weight:600}
+#auth .tag{font-size:12px;letter-spacing:.24em;color:var(--tx3);margin:6px 0 26px}
+#auth .note{font-size:12px;color:var(--tx3);line-height:2;margin-top:14px}
+.status{font-size:12.5px;color:var(--tx2);margin-top:12px;min-height:20px;line-height:1.9}
+.status.err{color:var(--danger)}
+
+.badge{display:inline-block;font-size:10.5px;letter-spacing:.1em;padding:2px 8px;border-radius:20px;
+  border:1px solid var(--line2);color:var(--tx3);margin-left:6px;vertical-align:2px}
+.badge.on{color:var(--gold);border-color:var(--line)}
+</style>
+</head>
+<body>
+
+<!-- ============ ログイン ============ -->
+<div id="auth" class="hide">
+  <div class="box">
+    <img src="assets/icon-512.png" alt="GOEN">
+    <div class="wm">GOEN</div>
+    <div class="tag">ご縁を、たぐり寄せる</div>
+
+    <div id="auth-step1">
+      <label class="lbl">メールアドレス</label>
+      <input id="auth-email" class="input" type="email" inputmode="email"
+             autocomplete="email" placeholder="you@example.com">
+
+      <div id="pw-wrap">
+        <label class="lbl" style="margin-top:13px">パスワード</label>
+        <input id="auth-pw" class="input" type="password" autocomplete="current-password"
+               placeholder="6文字以上（自分で決める）">
+        <button class="btn solid wide" style="margin-top:12px" onclick="pwLogin()">はじめる</button>
+        <button class="btn ghost wide sm" style="margin-top:9px" onclick="setMode('otp')">
+          メールに届くコードでログインする</button>
+      </div>
+
+      <div id="otp-wrap" class="hide">
+        <button class="btn solid wide" style="margin-top:12px" onclick="sendCode()">ログイン用コードを送る</button>
+        <button class="btn ghost wide sm" style="margin-top:9px" onclick="setMode('pw')">
+          パスワードでログインする</button>
+      </div>
+
+      <div class="note">最初の1回だけです。<br>次からはこの端末では自動でログインされます。</div>
+    </div>
+
+    <div id="auth-step2" class="hide">
+      <label class="lbl">メールに届いた6桁のコード</label>
+      <input id="auth-code" class="input" type="text" inputmode="numeric"
+             autocomplete="one-time-code" maxlength="8" placeholder="123456"
+             style="text-align:center;letter-spacing:.5em;font-size:22px">
+      <button class="btn solid wide" style="margin-top:12px" onclick="verifyCode()">ログイン</button>
+      <button class="btn ghost wide" style="margin-top:9px" onclick="authStep(1)">メールアドレスを変える</button>
+      <div class="note">メール内のリンクをタップしてもOKです。</div>
+    </div>
+
+    <div id="auth-status" class="status"></div>
+    <div class="row" style="gap:8px;margin-top:22px;justify-content:center">
+      <button class="btn ghost sm" onclick="connTest()">接続テスト</button>
+      <button class="btn ghost sm" onclick="openSupaConfig()">接続設定</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ アプリ ============ -->
+<div id="app" class="hide">
+  <header>
+    <button id="back" class="iconbtn hide" onclick="goBack()">‹</button>
+    <div id="brand" class="brand">
+      <img src="assets/icon-192.png" alt="">
+      <div>
+        <div class="wordmark">GOEN</div>
+      </div>
+    </div>
+    <div id="hdtitle" class="hd-title hide"></div>
+    <button class="iconbtn" onclick="nav({v:'settings'})">⚙</button>
+  </header>
+  <main id="view"></main>
+  <button id="fab" class="fab hide"></button>
+</div>
+
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script>
+/* =======================================================================
+   GOEN — マッチング対策アプリ
+   大項目(大学・科) → 中項目(病院) → 小項目(自由記述)
+   ======================================================================= */
+
+/* ---- Supabase 接続設定 --------------------------------------------------
+   README の手順で作った値をここに貼る。
+   貼らなくてもアプリ内の「接続設定」から入力できます。            */
+const SUPABASE_URL      = "https://jsnnohegdspjmupofdfg.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impzbm5vaGVnZHNwam11cG9mZGZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0NDkzOTQsImV4cCI6MjEwMzAyNTM5NH0.91z1bvzUbiE8eZheO6V_VWRKJRe_DVBbDrtBsLS3McU";
+/* --------------------------------------------------------------------- */
+
+const LS = {
+  url:'goen.url', key:'goen.key', cache:'goen.cache', queue:'goen.queue',
+  email:'goen.email', local:'goen.localonly'
+};
+const cfg = {
+  url: localStorage.getItem(LS.url) || SUPABASE_URL,
+  key: localStorage.getItem(LS.key) || SUPABASE_ANON_KEY
+};
+const localOnly = () => localStorage.getItem(LS.local) === '1';
+const configured = () => !!(cfg.url && cfg.key);
+
+const DEFAULT_FIELDS = [
+  '直感','忙しさ','定員','倍率','CBTみられそうか','筆記（形式）','面接（質問内容）',
+  '小論文（テーマ・特殊な対策）','病院見学の回数','給料',
+  '当直（回数・手当・上級医・翌日休めるか）','住宅','救急（成長できるか・上級医）',
+  '立地','３年目以降どうする人が多いか','特徴的なこと','研修医に聞いた悪いところ','その他'
+];
+const DEFAULT_CATS = ['京大　糖尿病内分泌','公立大　糖尿病内分泌'];
+
+let sb = null, user = null;
+let S = { cats:[], hosps:[], fields:[], entries:[] };
+let stack = [{v:'home'}];
+const $  = s => document.querySelector(s);
+const esc = s => String(s??'').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid = () => (crypto.randomUUID ? crypto.randomUUID()
+  : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{
+      const r=Math.random()*16|0; return (c==='x'?r:(r&0x3|0x8)).toString(16);}));
+const nowISO = () => new Date().toISOString();
+
+function toast(msg){
+  const t=$('#toast'); t.textContent=msg; t.classList.add('on');
+  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('on'),1900);
+}
+
+/* ================== 起動（実体の呼び出しは最下部） ================== */
+async function boot(){
+  if (localOnly() || !configured()) {
+    if (!localOnly() && !configured()) { showAuth('接続設定がまだです。'); return; }
+    startLocal(); return;
+  }
+  try {
+    const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
+    sb = createClient(cfg.url, cfg.key, {
+      auth:{ persistSession:true, autoRefreshToken:true, detectSessionInUrl:true, storageKey:'goen.auth' }
+    });
+  } catch (e) {
+    // オフライン等で SDK が落ちない場合 → キャッシュで動かす
+    if (loadCache()) { startApp(true); toast('オフライン表示中'); return; }
+    showAuth('通信できませんでした。オンラインで再度お試しください。'); return;
+  }
+  const { data:{ session } } = await sb.auth.getSession();
+  if (session) { user = session.user; startApp(); }
+  else showAuth('');
+  sb.auth.onAuthStateChange((ev, s2)=>{
+    if (ev === 'SIGNED_IN' && !user) { user = s2.user; startApp(); }
+  });
+}
+
+/* ================== 認証 ================== */
+function showAuth(msg){
+  $('#auth').classList.remove('hide'); $('#app').classList.add('hide');
+  $('#auth-email').value = localStorage.getItem(LS.email) || '';
+  setMode(localStorage.getItem('goen.mode') || 'pw');
+  setStatus(msg||'');
+}
+function setMode(m){
+  $('#pw-wrap').classList.toggle('hide',  m !== 'pw');
+  $('#otp-wrap').classList.toggle('hide', m !== 'otp');
+  localStorage.setItem('goen.mode', m); setStatus('');
+}
+function jaErr(m){
+  m = String(m||'');
+  if (/Invalid login credentials/i.test(m)) return 'メールアドレスかパスワードが違います。';
+  if (/Email not confirmed/i.test(m))       return 'メールの確認がまだです。届いたメールのリンクを開いてから、もう一度お試しください。';
+  if (/rate limit|too many/i.test(m))       return '送信回数の上限です。しばらく待ってからお試しください。';
+  if (/Password should be/i.test(m))        return 'パスワードは6文字以上にしてください。';
+  if (/Signups not allowed|disabled/i.test(m)) return '新規登録が無効になっています。Supabaseの設定を確認してください。';
+  if (/Failed to fetch|NetworkError/i.test(m)) return '通信できませんでした。接続設定かネットワークを確認してください。';
+  return m;
+}
+async function pwLogin(){
+  const email = $('#auth-email').value.trim(), pw = $('#auth-pw').value;
+  if (!email || !pw) return setStatus('メールアドレスとパスワードを入れてください。', true);
+  if (pw.length < 6)  return setStatus('パスワードは6文字以上にしてください。', true);
+  if (!sb) return setStatus('接続設定が未完了です。', true);
+  setStatus('確認中…');
+  const r = await sb.auth.signInWithPassword({ email, password: pw });
+  if (!r.error){ localStorage.setItem(LS.email, email); user = r.data.user; return startApp(); }
+  if (!/Invalid login credentials/i.test(r.error.message)) return setStatus(jaErr(r.error.message), true);
+
+  setStatus('新しく登録しています…');
+  const s = await sb.auth.signUp({ email, password: pw });
+  if (s.error) return setStatus(jaErr(s.error.message), true);
+  if (s.data.user && (s.data.user.identities || []).length === 0)
+    return setStatus('このメールアドレスは登録済みです。パスワードが違います。', true);
+  if (s.data.session){ localStorage.setItem(LS.email, email); user = s.data.user; return startApp(); }
+  setStatus('確認メールを送りました。メール内のリンクを開いてから、もう一度「はじめる」を押してください。');
+}
+async function connTest(){
+  if (!sb) return setStatus('接続設定が未完了です。', true);
+  setStatus('接続を確認しています…');
+  const { error } = await sb.from('categories').select('id').limit(1);
+  if (!error) return setStatus('✓ 接続OK。テーブルもできています。');
+  const m = (error.message || '') + ' ' + (error.code || '');
+  if (/does not exist|42P01|PGRST205|schema cache/i.test(m))
+    return setStatus('つながりましたが、テーブルがありません。SQL Editor で supabase-setup.sql を実行してください。', true);
+  setStatus('エラー：' + jaErr(error.message), true);
+}
+function setStatus(m, err){ const e=$('#auth-status'); e.textContent=m; e.className='status'+(err?' err':''); }
+function authStep(n){
+  $('#auth-step1').classList.toggle('hide', n!==1);
+  $('#auth-step2').classList.toggle('hide', n!==2);
+  setStatus('');
+}
+async function sendCode(){
+  const email = $('#auth-email').value.trim();
+  if (!email) return setStatus('メールアドレスを入れてください。', true);
+  if (!sb) return setStatus('接続設定が未完了です。', true);
+  setStatus('送信中…');
+  const { error } = await sb.auth.signInWithOtp({
+    email, options:{ shouldCreateUser:true, emailRedirectTo: location.href.split('#')[0] }
+  });
+  if (error) return setStatus(error.message, true);
+  localStorage.setItem(LS.email, email);
+  authStep(2); setStatus('メールを送りました。コードかリンクで進んでください。');
+}
+async function verifyCode(){
+  const email = localStorage.getItem(LS.email) || $('#auth-email').value.trim();
+  const token = $('#auth-code').value.trim();
+  if (!token) return setStatus('コードを入れてください。', true);
+  setStatus('確認中…');
+  const { data, error } = await sb.auth.verifyOtp({ email, token, type:'email' });
+  if (error) return setStatus(error.message, true);
+  user = data.user; startApp();
+}
+function openSupaConfig(){
+  sheet('接続設定', `
+    <label class="lbl">SUPABASE URL</label>
+    <input id="cf-url" class="input" placeholder="https://xxxx.supabase.co" value="${esc(cfg.url)}">
+    <label class="lbl" style="margin-top:12px">ANON KEY</label>
+    <textarea id="cf-key" class="input" rows="3" placeholder="eyJhbGci...">${esc(cfg.key)}</textarea>
+    <button class="btn ghost wide sm" style="margin-top:14px" onclick="useLocalOnly()">
+      この端末だけで使う（Supabaseなし）</button>`,
+    ()=>{
+      const u=$('#cf-url').value.trim(), k=$('#cf-key').value.trim();
+      if(!u||!k) { toast('両方入れてください'); return false; }
+      localStorage.setItem(LS.url,u); localStorage.setItem(LS.key,k);
+      localStorage.removeItem(LS.local);
+      location.reload();
+    });
+}
+function useLocalOnly(){
+  localStorage.setItem(LS.local,'1'); location.reload();
+}
+
+/* ================== ローカルのみモード ================== */
+function startLocal(){
+  user = { id:'local' };
+  if (!loadCache()) { S = seedData(); saveCache(); }
+  startApp(true);
+}
+
+/* ================== データ ================== */
+function cacheKey(){ return LS.cache + '.' + (user? user.id : 'anon'); }
+function queueKey(){ return LS.queue + '.' + (user? user.id : 'anon'); }
+function saveCache(){ try{ localStorage.setItem(cacheKey(), JSON.stringify(S)); }catch(e){} }
+function loadCache(){
+  try{ const r = localStorage.getItem(cacheKey()); if(!r) return false;
+       const d = JSON.parse(r); S = { cats:d.cats||[], hosps:d.hosps||[], fields:d.fields||[], entries:d.entries||[] };
+       return true; }catch(e){ return false; }
+}
+function seedData(){
+  const u = user ? user.id : 'local';
+  return {
+    cats: DEFAULT_CATS.map((n,i)=>({ id:uid(), user_id:u, name:n, sort_order:i })),
+    hosps: [],
+    fields: DEFAULT_FIELDS.map((n,i)=>({ id:uid(), user_id:u, label:n, sort_order:i })),
+    entries: []
+  };
+}
+function getQueue(){ try{ return JSON.parse(localStorage.getItem(queueKey())||'[]'); }catch(e){ return []; } }
+function setQueue(q){ localStorage.setItem(queueKey(), JSON.stringify(q)); }
+function enqueue(op){
+  if (!sb) return;
+  const q = getQueue();
+  // 同じ行の upsert は最後の一つだけ残す
+  const i = q.findIndex(o => o.table===op.table && o.row && op.row && o.row.id===op.row.id && o.type===op.type);
+  if (i>=0 && op.type==='upsert') q[i]=op; else q.push(op);
+  setQueue(q); flush();
+}
+let flushing = false;
+async function flush(){
+  if (!sb || flushing || !navigator.onLine) return;
+  flushing = true;
+  try{
+    let q = getQueue();
+    while (q.length){
+      const op = q[0];
+      if (op.type==='upsert'){
+        const { error } = await sb.from(op.table).upsert(op.row);
+        if (error) throw error;
+      } else {
+        const { error } = await sb.from(op.table).delete().eq('id', op.row.id);
+        if (error) throw error;
+      }
+      q.shift(); setQueue(q);
+    }
+    setSync(true);
+  }catch(e){ setSync(false); }
+  finally{ flushing = false; }
+}
+window.addEventListener('online', flush);
+
+let syncOK = true;
+function setSync(ok){
+  if (ok===syncOK) return; syncOK=ok;
+  const b = document.getElementById('syncbadge'); if (b) b.className = 'badge'+(ok?' on':'');
+  if (!ok) toast('未同期の変更があります（あとで自動送信）');
+}
+
+async function pull(){
+  if (!sb) return;
+  try{
+    const [c,h,f,e] = await Promise.all([
+      sb.from('categories').select('*').order('sort_order'),
+      sb.from('hospitals').select('*').order('sort_order'),
+      sb.from('fields').select('*').order('sort_order'),
+      sb.from('entries').select('*')
+    ]);
+    if (c.error||h.error||f.error||e.error) throw (c.error||h.error||f.error||e.error);
+    S = { cats:c.data, hosps:h.data, fields:f.data, entries:e.data };
+    if (!S.cats.length && !S.fields.length){
+      const seed = seedData();
+      for (const r of seed.cats)   { S.cats.push(r);   enqueue({table:'categories', type:'upsert', row:r}); }
+      for (const r of seed.fields) { S.fields.push(r); enqueue({table:'fields',     type:'upsert', row:r}); }
+      toast('初期データを作成しました');
+    }
+    saveCache(); render();
+  }catch(err){ setSync(false); }
+}
+
+/* ---- 変更 API（ローカル即時 + キュー送信） ---- */
+function put(table, row){
+  const arr = { categories:'cats', hospitals:'hosps', fields:'fields', entries:'entries' }[table];
+  const i = S[arr].findIndex(x=>x.id===row.id);
+  if (i>=0) S[arr][i] = row; else S[arr].push(row);
+  saveCache(); enqueue({table, type:'upsert', row});
+}
+function del(table, id){
+  const arr = { categories:'cats', hospitals:'hosps', fields:'fields', entries:'entries' }[table];
+  S[arr] = S[arr].filter(x=>x.id!==id);
+  if (table==='categories'){
+    const hs = S.hosps.filter(h=>h.category_id===id);
+    S.hosps = S.hosps.filter(h=>h.category_id!==id);
+    hs.forEach(h=>{ S.entries = S.entries.filter(e=>e.hospital_id!==h.id); });
+  }
+  if (table==='hospitals') S.entries = S.entries.filter(e=>e.hospital_id!==id);
+  if (table==='fields')    S.entries = S.entries.filter(e=>e.field_id!==id);
+  saveCache(); enqueue({table, type:'delete', row:{id}});
+}
+const uidNow = () => (user ? user.id : 'local');
+
+/* ================== 画面遷移 ================== */
+function startApp(offline){
+  $('#auth').classList.add('hide'); $('#app').classList.remove('hide');
+  if (!loadCache() && !offline) S = { cats:[], hosps:[], fields:[], entries:[] };
+  render();
+  if (!offline && sb) { flush(); pull(); }
+}
+function nav(v){ stack.push(v); history.pushState({d:stack.length},''); render(); }
+function goBack(){ if (stack.length>1){ stack.pop(); render(); } }
+window.addEventListener('popstate', ()=>{ if (stack.length>1){ stack.pop(); render(); } });
+
+const cur = () => stack[stack.length-1];
+const catOf  = id => S.cats.find(c=>c.id===id);
+const hospOf = id => S.hosps.find(h=>h.id===id);
+const sortedFields = () => [...S.fields].sort((a,b)=>(a.sort_order??0)-(b.sort_order??0));
+const hospsIn = cid => S.hosps.filter(h=>h.category_id===cid)
+  .sort((a,b)=>(a.sort_order??0)-(b.sort_order??0));
+const entryOf = (hid,fid) => S.entries.find(e=>e.hospital_id===hid && e.field_id===fid);
+const filled  = hid => S.entries.filter(e=>e.hospital_id===hid && (e.value||'').trim()).length;
+
+function render(){
+  const v = cur();
+  const back=$('#back'), brand=$('#brand'), ht=$('#hdtitle'), fab=$('#fab');
+  const isHome = v.v==='home';
+  back.classList.toggle('hide', isHome);
+  brand.classList.toggle('hide', !isHome);
+  ht.classList.toggle('hide', isHome);
+  fab.classList.add('hide'); fab.onclick=null;
+  window.scrollTo(0,0);
+  ({ home:viewHome, cat:viewCat, hosp:viewHosp, compare:viewCompare, settings:viewSettings }[v.v]||viewHome)(v);
+}
+function head(title, sub){
+  $('#hdtitle').innerHTML = esc(title) + (sub?`<span class="hd-sub">${esc(sub)}</span>`:'');
+}
+function setFab(label, fn){ const f=$('#fab'); f.textContent=label; f.onclick=fn; f.classList.remove('hide'); }
+
+/* ================== 画面：大項目一覧 ================== */
+function viewHome(){
+  const q = (window._q||'').trim();
+  let body = `<div class="searchwrap"><span>検索</span>
+    <input class="input" id="q" placeholder="病院名・メモを横断検索" value="${esc(q)}"
+      oninput="window._q=this.value;renderSearch()"></div>
+    <div id="qres"></div><div id="qlist">`;
+
+  const cats = [...S.cats].sort((a,b)=>(a.sort_order??0)-(b.sort_order??0));
+  body += `<div class="sec-label">大学・科</div>`;
+  if (!cats.length){
+    body += `<div class="empty"><b>まだ何もありません</b>右下の「＋ 大学・科」から追加してください。</div>`;
+  } else {
+    for (const c of cats){
+      const hs = hospsIn(c.id);
+      body += `<div class="card"><div class="row">
+        <button class="row-main" onclick="nav({v:'cat',id:'${c.id}'})">
+          <div class="title">${esc(c.name)}</div>
+          <div class="meta">病院 ${hs.length}件</div></button>
+        <button class="iconbtn" onclick="editCat('${c.id}')">⋯</button>
+        <span class="chev">›</span></div></div>`;
+    }
+  }
+  body += `</div>`;
+  head('GOEN');
+  $('#view').innerHTML = body;
+  setFab('＋ 大学・科', addCat);
+  renderSearch();
+}
+function renderSearch(){
+  const q = (window._q||'').trim().toLowerCase();
+  const res = $('#qres'), list = $('#qlist');
+  if (!res) return;
+  if (!q){ res.innerHTML=''; if(list) list.classList.remove('hide'); return; }
+  if (list) list.classList.add('hide');
+  const fmap = Object.fromEntries(S.fields.map(f=>[f.id,f.label]));
+  const hits = [];
+  for (const h of S.hosps){
+    const c = catOf(h.category_id);
+    const inName = h.name.toLowerCase().includes(q);
+    const es = S.entries.filter(e=>e.hospital_id===h.id && (e.value||'').toLowerCase().includes(q));
+    if (inName || es.length){
+      hits.push({h, c, snips: es.slice(0,3).map(e=>`${fmap[e.field_id]||''}：${e.value.slice(0,60)}`)});
+    }
+  }
+  res.innerHTML = `<div class="sec-label">検索結果 ${hits.length}件</div>` + (hits.length
+    ? hits.map(x=>`<div class="card"><button class="row-main" style="width:100%"
+        onclick="nav({v:'hosp',id:'${x.h.id}'})">
+        <div class="title">${esc(x.h.name)}</div>
+        <div class="meta">${esc(x.c?x.c.name:'')}</div>
+        ${x.snips.map(s=>`<div class="meta" style="color:var(--tx2);white-space:normal">${esc(s)}</div>`).join('')}
+      </button></div>`).join('')
+    : `<div class="empty">見つかりませんでした</div>`);
+}
+
+/* ================== 画面：病院一覧 ================== */
+function viewCat(v){
+  const c = catOf(v.id); if(!c){ stack.pop(); return render(); }
+  const hs = hospsIn(c.id);
+  head(c.name, '中項目：病院');
+  let body = `<div class="row" style="gap:8px;margin-bottom:14px">
+      <button class="btn sm" style="flex:1" onclick="nav({v:'compare',id:'${c.id}'})">一覧で比較する</button>
+      <button class="btn ghost sm" onclick="editCat('${c.id}')">名前を編集</button>
+    </div>`;
+  if (!hs.length){
+    body += `<div class="empty"><b>病院がまだありません</b>右下の「＋ 病院」から追加してください。</div>`;
+  } else {
+    body += hs.map((h,i)=>`<div class="card"><div class="row">
+      <button class="row-main" onclick="nav({v:'hosp',id:'${h.id}'})">
+        <div class="title">${esc(h.name)}</div>
+        <div class="meta">記入済み ${filled(h.id)} / ${S.fields.length} 項目</div></button>
+      <button class="mini" onclick="moveHosp('${h.id}',-1)" ${i===0?'disabled style="opacity:.3"':''}>↑</button>
+      <button class="mini" onclick="moveHosp('${h.id}',1)" ${i===hs.length-1?'disabled style="opacity:.3"':''}>↓</button>
+      <span class="chev">›</span></div></div>`).join('');
+  }
+  $('#view').innerHTML = body;
+  setFab('＋ 病院', ()=>addHosp(c.id));
+}
+
+/* ================== 画面：病院詳細 ================== */
+function viewHosp(v){
+  const h = hospOf(v.id); if(!h){ stack.pop(); return render(); }
+  const c = catOf(h.category_id);
+  head(h.name, c?c.name:'');
+  const fs = sortedFields();
+  let body = `<div class="row" style="gap:8px;margin-bottom:16px">
+      <button class="btn ghost sm" style="flex:1" onclick="renameHosp('${h.id}')">病院名を編集</button>
+      <button class="btn ghost sm" onclick="askDelHosp('${h.id}')">削除</button>
+    </div><div class="sec-label">小項目<span id="syncbadge" class="badge${syncOK?' on':''}">同期</span></div>`;
+  body += fs.map(f=>{
+    const e = entryOf(h.id, f.id);
+    return `<div class="fld">
+      <div class="fld-head">
+        <div class="fld-name"><span class="dot">◆</span>${esc(f.label)}</div>
+        <button class="mini" onclick="editField('${f.id}')">編集</button>
+      </div>
+      <textarea class="input fld-in" rows="2" placeholder="自由に記入"
+        oninput="grow(this);onEntry('${h.id}','${f.id}',this.value)">${esc(e?e.value:'')}</textarea>
+    </div>`;
+  }).join('');
+  body += `<button class="btn wide ghost" style="margin-top:6px" onclick="addField()">＋ 小項目を追加</button>
+    <div class="meta" style="margin-top:10px;text-align:center">小項目はすべての病院で共通です</div>`;
+  $('#view').innerHTML = body;
+  $('#view').querySelectorAll('textarea.fld-in').forEach(grow);
+}
+function grow(el){ el.style.height='auto'; el.style.height=(el.scrollHeight+2)+'px'; }
+const timers = {};
+function onEntry(hid, fid, val){
+  const k = hid+'|'+fid;
+  clearTimeout(timers[k]);
+  timers[k] = setTimeout(()=>{
+    let e = entryOf(hid,fid);
+    if (!e) e = { id:uid(), user_id:uidNow(), hospital_id:hid, field_id:fid, value:val, updated_at:nowISO() };
+    else e = { ...e, value:val, updated_at:nowISO() };
+    put('entries', e);
+  }, 500);
+}
+
+/* ================== 画面：比較表 ================== */
+function viewCompare(v){
+  const c = catOf(v.id); if(!c){ stack.pop(); return render(); }
+  const hs = hospsIn(c.id), fs = sortedFields();
+  head(c.name, '一覧で比較');
+  if (!hs.length){ $('#view').innerHTML = `<div class="empty">病院がありません</div>`; return; }
+  let t = `<div class="tblwrap"><table><thead><tr><th>病院</th>`
+    + fs.map(f=>`<th>${esc(f.label)}</th>`).join('') + `</tr></thead><tbody>`;
+  for (const h of hs){
+    t += `<tr><th>${esc(h.name)}</th>`
+      + fs.map(f=>{ const e=entryOf(h.id,f.id); return `<td>${esc(e?e.value:'')}</td>`; }).join('')
+      + `</tr>`;
+  }
+  t += `</tbody></table></div><div class="meta" style="margin-top:10px;text-align:center">横にスクロールできます</div>`;
+  $('#view').innerHTML = t;
+}
+
+/* ================== 画面：設定 ================== */
+function viewSettings(){
+  head('設定');
+  const fs = sortedFields();
+  let body = `<div class="sec-label">アカウント</div>
+    <div class="card plain"><div class="meta">${esc(user && user.email ? user.email : (localOnly()?'この端末のみで使用中':'—'))}</div>
+    <div class="meta" style="margin-top:4px">大学・科 ${S.cats.length}／病院 ${S.hosps.length}／小項目 ${S.fields.length}</div></div>`;
+
+  body += `<div class="sec-label">小項目の管理</div>`;
+  body += fs.map((f,i)=>`<div class="card plain"><div class="row">
+      <div class="row-main"><div class="title" style="font-size:15px">${esc(f.label)}</div></div>
+      <button class="mini" onclick="moveField('${f.id}',-1)" ${i===0?'disabled style="opacity:.3"':''}>↑</button>
+      <button class="mini" onclick="moveField('${f.id}',1)" ${i===fs.length-1?'disabled style="opacity:.3"':''}>↓</button>
+      <button class="mini" onclick="editField('${f.id}')">編集</button>
+    </div></div>`).join('');
+  body += `<button class="btn wide ghost" style="margin-top:8px" onclick="addField()">＋ 小項目を追加</button>`;
+
+  body += `<div class="sec-label">大学・科の並び</div>`;
+  const cats=[...S.cats].sort((a,b)=>(a.sort_order??0)-(b.sort_order??0));
+  body += cats.map((c,i)=>`<div class="card plain"><div class="row">
+      <div class="row-main"><div class="title" style="font-size:15px">${esc(c.name)}</div></div>
+      <button class="mini" onclick="moveCat('${c.id}',-1)" ${i===0?'disabled style="opacity:.3"':''}>↑</button>
+      <button class="mini" onclick="moveCat('${c.id}',1)" ${i===cats.length-1?'disabled style="opacity:.3"':''}>↓</button>
+      <button class="mini" onclick="editCat('${c.id}')">編集</button>
+    </div></div>`).join('');
+
+  body += `<div class="sec-label">データ</div>
+    <button class="btn wide ghost" onclick="exportJSON()">バックアップを書き出す（JSON）</button>
+    <button class="btn wide ghost" style="margin-top:9px" onclick="importJSON()">バックアップから復元</button>
+    <button class="btn wide ghost" style="margin-top:9px" onclick="openSupaConfig()">接続設定</button>
+    <button class="btn wide danger" style="margin-top:20px" onclick="doLogout()">ログアウト</button>
+    <div class="meta" style="margin-top:12px;text-align:center;line-height:2">
+      ログアウトすると次回またコードでのログインが必要です</div>`;
+  $('#view').innerHTML = body;
+}
+
+/* ================== 追加・編集 ================== */
+function sheet(title, html, onOK, okLabel){
+  $('#modal').innerHTML = `<div class="mask" onclick="if(event.target===this)closeSheet()">
+    <div class="sheet"><h3>${esc(title)}</h3>${html}
+      <div class="btns"><button class="btn ghost" onclick="closeSheet()">キャンセル</button>
+      <button class="btn solid" id="sheet-ok">${esc(okLabel||'保存')}</button></div></div></div>`;
+  $('#sheet-ok').onclick = ()=>{ if (onOK() !== false) closeSheet(); };
+  const inp = $('#modal').querySelector('input,textarea'); if (inp) setTimeout(()=>inp.focus(),80);
+}
+function closeSheet(){ $('#modal').innerHTML=''; }
+
+function addCat(){
+  sheet('大学・科を追加', `<label class="lbl">名前（例：京大　糖尿病内分泌）</label>
+    <input id="n" class="input" placeholder="○○大　△△科">`, ()=>{
+    const n=$('#n').value.trim(); if(!n) return false;
+    put('categories', { id:uid(), user_id:uidNow(), name:n,
+      sort_order:(S.cats.length?Math.max(...S.cats.map(c=>c.sort_order??0))+1:0) });
+    render(); toast('追加しました');
+  }, '追加');
+}
+function editCat(id){
+  const c = catOf(id); if(!c) return;
+  sheet('大学・科', `<label class="lbl">名前</label>
+    <input id="n" class="input" value="${esc(c.name)}">
+    <button class="btn wide danger sm" style="margin-top:14px" onclick="askDelCat('${id}')">
+      この大学・科を削除（病院ごと消えます）</button>`, ()=>{
+    const n=$('#n').value.trim(); if(!n) return false;
+    put('categories', { ...c, name:n }); render();
+  });
+}
+function askDelCat(id){
+  const c=catOf(id); const n=hospsIn(id).length;
+  if (!confirm(`「${c.name}」と、その中の病院${n}件をすべて削除します。よろしいですか？`)) return;
+  del('categories', id); closeSheet();
+  stack = stack.filter(s=>!(s.v==='cat'&&s.id===id) && !(s.v==='compare'&&s.id===id));
+  if(!stack.length) stack=[{v:'home'}];
+  render(); toast('削除しました');
+}
+function addHosp(cid){
+  sheet('病院を追加', `<label class="lbl">病院名</label>
+    <input id="n" class="input" placeholder="○○病院">`, ()=>{
+    const n=$('#n').value.trim(); if(!n) return false;
+    const hs=hospsIn(cid);
+    const id=uid();
+    put('hospitals', { id, user_id:uidNow(), category_id:cid, name:n,
+      sort_order:(hs.length?Math.max(...hs.map(h=>h.sort_order??0))+1:0) });
+    render(); nav({v:'hosp',id});
+  }, '追加');
+}
+function renameHosp(id){
+  const h=hospOf(id); if(!h) return;
+  sheet('病院名を編集', `<input id="n" class="input" value="${esc(h.name)}">`, ()=>{
+    const n=$('#n').value.trim(); if(!n) return false;
+    put('hospitals', { ...h, name:n }); render();
+  });
+}
+function askDelHosp(id){
+  const h=hospOf(id);
+  if (!confirm(`「${h.name}」を削除します。記入した内容も消えます。よろしいですか？`)) return;
+  del('hospitals', id);
+  stack = stack.filter(s=>!(s.v==='hosp'&&s.id===id)); if(!stack.length) stack=[{v:'home'}];
+  render(); toast('削除しました');
+}
+function addField(){
+  sheet('小項目を追加', `<label class="lbl">項目名</label>
+    <input id="n" class="input" placeholder="例：後期研修の実績">
+    <div class="meta" style="margin-top:10px">すべての病院に同じ項目が追加されます</div>`, ()=>{
+    const n=$('#n').value.trim(); if(!n) return false;
+    put('fields', { id:uid(), user_id:uidNow(), label:n,
+      sort_order:(S.fields.length?Math.max(...S.fields.map(f=>f.sort_order??0))+1:0) });
+    render(); toast('追加しました');
+  }, '追加');
+}
+function editField(id){
+  const f=S.fields.find(x=>x.id===id); if(!f) return;
+  sheet('小項目', `<label class="lbl">項目名</label>
+    <input id="n" class="input" value="${esc(f.label)}">
+    <button class="btn wide danger sm" style="margin-top:14px" onclick="askDelField('${id}')">
+      この項目を削除（全病院の記入内容も消えます）</button>`, ()=>{
+    const n=$('#n').value.trim(); if(!n) return false;
+    put('fields', { ...f, label:n }); render();
+  });
+}
+function askDelField(id){
+  const f=S.fields.find(x=>x.id===id);
+  const n=S.entries.filter(e=>e.field_id===id && (e.value||'').trim()).length;
+  if (!confirm(`「${f.label}」を削除します。記入済み${n}件も消えます。よろしいですか？`)) return;
+  del('fields', id); closeSheet(); render(); toast('削除しました');
+}
+
+/* ---- 並べ替え ---- */
+function swapOrder(list, id, dir, table){
+  const arr=[...list].sort((a,b)=>(a.sort_order??0)-(b.sort_order??0));
+  const i=arr.findIndex(x=>x.id===id), j=i+dir;
+  if (i<0||j<0||j>=arr.length) return;
+  const a=arr[i], b=arr[j];
+  const ao=a.sort_order??i, bo=b.sort_order??j;
+  put(table, {...a, sort_order:bo}); put(table, {...b, sort_order:ao});
+  render();
+}
+const moveField = (id,d)=>swapOrder(S.fields, id, d, 'fields');
+const moveCat   = (id,d)=>swapOrder(S.cats,  id, d, 'categories');
+function moveHosp(id,d){ const h=hospOf(id); swapOrder(hospsIn(h.category_id), id, d, 'hospitals'); }
+
+/* ---- バックアップ ---- */
+function exportJSON(){
+  const blob = new Blob([JSON.stringify(S,null,2)], {type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`goen-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.click(); URL.revokeObjectURL(a.href);
+}
+function importJSON(){
+  const i=document.createElement('input'); i.type='file'; i.accept='application/json';
+  i.onchange=async()=>{
+    const f=i.files[0]; if(!f) return;
+    try{
+      const d=JSON.parse(await f.text());
+      if(!confirm('現在のデータに読み込んだ内容を上書き追加します。よろしいですか？')) return;
+      for (const [k,t] of [['cats','categories'],['hosps','hospitals'],['fields','fields'],['entries','entries']]){
+        for (const r of (d[k]||[])) put(t, {...r, user_id:uidNow()});
+      }
+      render(); toast('復元しました');
+    }catch(e){ alert('読み込めませんでした'); }
+  };
+  i.click();
+}
+async function doLogout(){
+  if(!confirm('ログアウトします。この端末の表示用データも消えます。よろしいですか？')) return;
+  localStorage.removeItem(cacheKey()); localStorage.removeItem(queueKey());
+  localStorage.removeItem(LS.local);
+  if (sb) await sb.auth.signOut();
+  location.reload();
+}
+
+/* ---- Service Worker（オフライン用） ---- */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', ()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
+
+/* ---- 起動 ---- */
+boot();
+</script>
+</body>
+</html>
