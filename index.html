@@ -271,7 +271,7 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const LS = {
   url:'goen.url', key:'goen.key', cache:'goen.cache', queue:'goen.queue',
-  email:'goen.email', local:'goen.localonly'
+  email:'goen.email', local:'goen.localonly', tomb:'goen.tomb'
 };
 const cfg = {
   url: localStorage.getItem(LS.url) || SUPABASE_URL,
@@ -469,39 +469,96 @@ function seedData(){
     entries: []
   };
 }
+const ARR = { categories:'cats', hospitals:'hosps', fields:'fields', entries:'entries' };
 function getQueue(){ try{ return JSON.parse(localStorage.getItem(queueKey())||'[]'); }catch(e){ return []; } }
-function setQueue(q){ localStorage.setItem(queueKey(), JSON.stringify(q)); }
+function setQueue(q){ try{ localStorage.setItem(queueKey(), JSON.stringify(q)); }catch(e){} }
+function tombKey(){ return LS.tomb + '.' + (user? user.id : 'anon'); }
+function getTomb(){ try{ return new Set(JSON.parse(localStorage.getItem(tombKey())||'[]')); }catch(e){ return new Set(); } }
+function addTomb(id){
+  const t = [...getTomb(), id].slice(-800);
+  try{ localStorage.setItem(tombKey(), JSON.stringify(t)); }catch(e){}
+}
 function enqueue(op){
   if (!sb) return;
-  const q = getQueue();
-  // 同じ行の upsert は最後の一つだけ残す
-  const i = q.findIndex(o => o.table===op.table && o.row && op.row && o.row.id===op.row.id && o.type===op.type);
-  if (i>=0 && op.type==='upsert') q[i]=op; else q.push(op);
+  op.opId = op.opId || uid();
+  const q = getQueue();                       // ← 同期的な read-modify-write（途中で await しない）
+  const i = q.findIndex(o => o.table===op.table && o.type===op.type && o.row && op.row && o.row.id===op.row.id);
+  if (i>=0 && op.type==='upsert'){ op.opId = q[i].opId; q[i] = op; } else q.push(op);
   setQueue(q); flush();
+}
+function dequeue(op){
+  const q = getQueue();                       // ← 毎回読み直す（古いスナップショットで上書きしない）
+  const i = q.findIndex(o => o.opId === op.opId);
+  if (i >= 0) q.splice(i, 1); else if (q.length) q.shift();
+  setQueue(q);
+}
+/* 親（大学・科／病院／小項目）が未送信で外部キーエラーになったら、親を先頭に回す */
+function fixFK(err, op){
+  const m = ((err && err.message) || '') + ' ' + ((err && err.code) || '');
+  if (!/23503|foreign key|violates/i.test(m)) return false;
+  const parents = [];
+  if (op.table === 'entries'){
+    const h = S.hosps.find(x => x.id === op.row.hospital_id);
+    const f = S.fields.find(x => x.id === op.row.field_id);
+    if (h){ const c = S.cats.find(x => x.id === h.category_id); if (c) parents.push(['categories', c]); parents.push(['hospitals', h]); }
+    if (f) parents.push(['fields', f]);
+  } else if (op.table === 'hospitals'){
+    const c = S.cats.find(x => x.id === op.row.category_id);
+    if (c) parents.push(['categories', c]);
+  }
+  if (!parents.length) return false;
+  let q = getQueue();
+  const front = [];
+  for (const [table, row] of parents){
+    const i = q.findIndex(o => o.table===table && o.type==='upsert' && o.row.id===row.id);
+    if (i >= 0) front.push(q.splice(i,1)[0]);
+    else front.push({ opId:uid(), table, type:'upsert', row });
+  }
+  setQueue([...front, ...q]);
+  return true;
 }
 let flushing = false;
 async function flush(){
   if (!sb || flushing || !navigator.onLine) return;
   flushing = true;
+  const fkTried = new Set();
+  let guard = 0;
   try{
-    let q = getQueue();
-    while (q.length){
+    while (true){
+      const q = getQueue();
+      if (!q.length || ++guard > 3000) break;
       const op = q[0];
-      if (op.type==='upsert'){
-        const { error } = await sb.from(op.table).upsert(op.row);
-        if (error) throw error;
-      } else {
-        const { error } = await sb.from(op.table).delete().eq('id', op.row.id);
-        if (error) throw error;
+      try{
+        const res = (op.type === 'upsert')
+          ? await sb.from(op.table).upsert(op.row,
+              op.table === 'entries' ? { onConflict:'hospital_id,field_id' } : undefined)
+          : await sb.from(op.table).delete().eq('id', op.row.id);
+        if (res.error) throw res.error;
+      }catch(e){
+        if (!fkTried.has(op.opId) && fixFK(e, op)){ fkTried.add(op.opId); continue; }
+        throw e;
       }
-      q.shift(); setQueue(q);
+      dequeue(op);
     }
-    setSync(true);
+    lastError = ''; setSync(true);
   }catch(e){
-    lastError = (e && e.message) ? e.message : String(e);
+    lastError = jaErr((e && e.message) ? e.message : String(e));
     setSync(false);
   }
   finally{ flushing = false; }
+}
+const pendingCount = () => getQueue().length;
+/* 未送信のキューの中身を、いまの表示データに反映する（＝入力が消えないようにする） */
+function applyQueue(){
+  for (const op of getQueue()){
+    const a = ARR[op.table]; if (!a || !op.row) continue;
+    if (op.type === 'upsert'){
+      const i = S[a].findIndex(x => x.id === op.row.id);
+      if (i >= 0) S[a][i] = op.row; else S[a].push(op.row);
+    } else {
+      S[a] = S[a].filter(x => x.id !== op.row.id);
+    }
+  }
 }
 window.addEventListener('online', flush);
 
@@ -509,7 +566,7 @@ let syncOK = true, lastError = '';
 function setSync(ok){
   if (ok===syncOK) return; syncOK=ok;
   const b = document.getElementById('syncbadge'); if (b) b.className = 'badge'+(ok?' on':'');
-  if (!ok) toast('未同期の変更があります（あとで自動送信）');
+  if (!ok) toast('未送信あり（この端末には保存済み）');
 }
 
 async function pull(){
@@ -522,7 +579,20 @@ async function pull(){
       sb.from('entries').select('*')
     ]);
     if (c.error||h.error||f.error||e.error) throw (c.error||h.error||f.error||e.error);
-    S = { cats:c.data, hosps:h.data, fields:f.data, entries:e.data };
+    // サーバーの内容と、手元にしかない行を「マージ」する（上書きしない＝入力が消えない）
+    const tomb = getTomb();
+    const merge = (server, local) => {
+      const m = new Map(server.map(r => [r.id, r]));
+      for (const r of local) if (!m.has(r.id) && !tomb.has(r.id)) m.set(r.id, r);
+      return [...m.values()];
+    };
+    S = {
+      cats:    merge(c.data, S.cats),
+      hosps:   merge(h.data, S.hosps),
+      fields:  merge(f.data, S.fields),
+      entries: merge(e.data, S.entries)
+    };
+    applyQueue();   // 未送信の変更を上に重ねる
     // 大項目と小項目は「それぞれ独立に」不足していれば補う
     const seed = seedData();
     let seeded = false;
@@ -535,9 +605,9 @@ async function pull(){
       seeded = true;
     }
     if (seeded) toast('初期データを作成しました');
-    lastError = ''; saveCache(); render();
+    saveCache(); render();
   }catch(err){
-    lastError = (err && err.message) ? err.message : String(err);
+    lastError = jaErr((err && err.message) ? err.message : String(err));
     setSync(false); render();
   }
 }
@@ -554,6 +624,28 @@ function ensureFields(){
   toast(n ? `小項目を${n}個つくりました` : '不足している小項目はありません');
 }
 
+/* 同じ名前の小項目が二重にできてしまった場合に、1つにまとめる */
+function dedupeFields(){
+  const keepBy = new Map(); const dups = [];
+  for (const f of sortedFields()){
+    if (keepBy.has(f.label)) dups.push([f, keepBy.get(f.label)]);
+    else keepBy.set(f.label, f);
+  }
+  if (!dups.length){ toast('重複はありません'); return; }
+  for (const [dup, keep] of dups){
+    for (const de of S.entries.filter(x => x.field_id === dup.id)){
+      if (!(de.value||'').trim()) continue;
+      const ke = entryOf(de.hospital_id, keep.id);
+      if (ke && (ke.value||'').trim()) continue;      // 既に書いてある方を優先
+      if (ke) put('entries', { ...ke, value:de.value, updated_at:nowISO() });
+      else    put('entries', { id:uid(), user_id:uidNow(), hospital_id:de.hospital_id,
+                               field_id:keep.id, value:de.value, updated_at:nowISO() });
+    }
+    del('fields', dup.id);
+  }
+  render(); toast(`${dups.length}個の重複をまとめました`);
+}
+
 /* ---- 変更 API（ローカル即時 + キュー送信） ---- */
 function put(table, row){
   const arr = { categories:'cats', hospitals:'hosps', fields:'fields', entries:'entries' }[table];
@@ -562,25 +654,35 @@ function put(table, row){
   saveCache(); enqueue({table, type:'upsert', row});
 }
 function del(table, id){
-  const arr = { categories:'cats', hospitals:'hosps', fields:'fields', entries:'entries' }[table];
+  const arr = ARR[table];
+  addTomb(id);
   S[arr] = S[arr].filter(x=>x.id!==id);
   if (table==='categories'){
     const hs = S.hosps.filter(h=>h.category_id===id);
     S.hosps = S.hosps.filter(h=>h.category_id!==id);
-    hs.forEach(h=>{ S.entries = S.entries.filter(e=>e.hospital_id!==h.id); });
+    hs.forEach(h=>{ addTomb(h.id);
+      S.entries.filter(e=>e.hospital_id===h.id).forEach(e=>addTomb(e.id));
+      S.entries = S.entries.filter(e=>e.hospital_id!==h.id); });
   }
-  if (table==='hospitals') S.entries = S.entries.filter(e=>e.hospital_id!==id);
-  if (table==='fields')    S.entries = S.entries.filter(e=>e.field_id!==id);
+  if (table==='hospitals'){
+    S.entries.filter(e=>e.hospital_id===id).forEach(e=>addTomb(e.id));
+    S.entries = S.entries.filter(e=>e.hospital_id!==id);
+  }
+  if (table==='fields'){
+    S.entries.filter(e=>e.field_id===id).forEach(e=>addTomb(e.id));
+    S.entries = S.entries.filter(e=>e.field_id!==id);
+  }
   saveCache(); enqueue({table, type:'delete', row:{id}});
 }
 const uidNow = () => (user ? user.id : 'local');
 
 /* ================== 画面遷移 ================== */
-function startApp(offline){
+async function startApp(offline){
   $('#auth').classList.add('hide'); $('#app').classList.remove('hide');
   if (!loadCache() && !offline) S = { cats:[], hosps:[], fields:[], entries:[] };
-  render();
-  if (!offline && sb) { flush(); pull(); }
+  applyQueue();            // 未送信の入力を必ず画面に戻す
+  saveCache(); render();
+  if (!offline && sb){ await flush(); pull(); }   // 送信しきってから読み込む
 }
 function nav(v){ stack.push(v); history.pushState({d:stack.length},''); render(); }
 function goBack(){ if (stack.length>1){ stack.pop(); render(); } }
@@ -614,13 +716,22 @@ function setFab(label, fn){ const f=$('#fab'); f.textContent=label; f.onclick=fn
 /* ================== 画面：大項目一覧 ================== */
 function errBanner(){
   if (!lastError) return '';
+  const n = pendingCount();
   return `<div class="card" style="border-color:rgba(226,112,122,.4)">
-    <div class="title" style="font-size:14px;color:var(--danger);white-space:normal">同期できていません</div>
-    <div class="meta" style="white-space:normal;color:var(--tx2);margin-top:4px">${esc(lastError)}</div>
+    <div class="title" style="font-size:14px;color:var(--danger);white-space:normal">サーバーに送れていません</div>
+    <div class="meta" style="white-space:normal;color:var(--tx2);margin-top:4px">
+      入力した内容はこの端末に残っています（未送信 ${n}件）。消えないのでご安心ください。</div>
+    <div class="meta" style="white-space:normal;margin-top:6px">${esc(lastError)}</div>
     <div class="row" style="gap:8px;margin-top:11px">
-      <button class="btn sm" onclick="pull()">再試行</button>
-      <button class="btn ghost sm" onclick="ensureFields()">小項目を作り直す</button>
+      <button class="btn sm" onclick="retrySync()">もう一度送る</button>
+      <button class="btn ghost sm" onclick="connTestApp()">詳しく見る</button>
     </div></div>`;
+}
+async function retrySync(){
+  toast('送信しています…');
+  await flush();
+  if (lastError) { render(); toast('まだ送れていません'); }
+  else { await pull(); toast('送信できました'); }
 }
 function viewHome(){
   const q = (window._q||'').trim();
@@ -769,9 +880,12 @@ function viewCompare(v){
 function viewSettings(){
   head('設定');
   const fs = sortedFields();
+  const pend = pendingCount();
   let body = errBanner() + `<div class="sec-label">アカウント</div>
     <div class="card plain"><div class="meta">${esc(user && user.email ? user.email : (localOnly()?'この端末のみで使用中':'—'))}</div>
-    <div class="meta" style="margin-top:4px">大学・科 ${S.cats.length}／病院 ${S.hosps.length}／小項目 ${S.fields.length}</div></div>`;
+    <div class="meta" style="margin-top:4px">大学・科 ${S.cats.length}／病院 ${S.hosps.length}／小項目 ${S.fields.length}／記入 ${S.entries.filter(e=>(e.value||'').trim()).length}</div>
+    <div class="meta" style="margin-top:4px;color:${pend?'var(--danger)':'var(--tx3)'}">未送信 ${pend}件${pend?'（この端末には保存済み）':''}</div>
+    ${pend ? `<button class="btn sm" style="margin-top:10px" onclick="retrySync()">今すぐ送信する</button>` : ''}</div>`;
 
   body += `<div class="sec-label">小項目の管理</div>`;
   body += fs.map((f,i)=>`<div class="card plain"><div class="row">
@@ -781,7 +895,8 @@ function viewSettings(){
       <button class="mini" onclick="editField('${f.id}')">編集</button>
     </div></div>`).join('');
   body += `<button class="btn wide ghost" style="margin-top:8px" onclick="addField()">＋ 小項目を追加</button>
-    <button class="btn wide ghost" style="margin-top:9px" onclick="ensureFields()">はじめの18項目を補充する</button>`;
+    <button class="btn wide ghost" style="margin-top:9px" onclick="ensureFields()">はじめの18項目を補充する</button>
+    <button class="btn wide ghost" style="margin-top:9px" onclick="dedupeFields()">同じ名前の項目をまとめる</button>`;
 
   body += `<div class="sec-label">大学・科の並び</div>`;
   const cats=[...S.cats].sort((a,b)=>(a.sort_order??0)-(b.sort_order??0));
